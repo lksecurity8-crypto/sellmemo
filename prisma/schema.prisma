@@ -96,3 +96,17 @@ model VerificationToken {
   @@unique([identifier, token])
   @@map("verification_tokens")
 }
+
+// Payment Method Settings Model
+model PaymentMethod {
+  id              String   @id @default(cuid())
+  type            String   @unique // orange_money, mtn_mobile_money
+  name            String
+  accountHolder   String
+  accountNumber   String
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("payment_methods")
+}
