@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
-import { useSearchParams, useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -10,15 +10,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { AlertCircle, Loader2, CheckCircle2 } from 'lucide-react'
 import { formatCurrency } from '@/lib/utils'
 
-const PAYMENT_METHODS = {
-  orange_money: {
-    name: 'Orange Money',
-    number: '+221 77 000 0000',
-  },
-  mtn_mobile_money: {
-    name: 'MTN Mobile Money',
-    number: '+221 77 111 1111',
-  },
+interface PaymentMethod {
+  id: string
+  type: string
+  name: string
+  accountHolder: string
+  accountNumber: string
 }
 
 const PLAN_PRICES: Record<string, number> = {
@@ -33,20 +30,44 @@ export default function PaymentPage() {
   const plan = (searchParams.get('plan') as string) || 'pro'
   const amount = PLAN_PRICES[plan] || 500
 
-  const [loading, setLoading] = useState(false)
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([])
+  const [loading, setLoading] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const [formData, setFormData] = useState({
-    paymentMethod: 'orange_money',
+    paymentMethod: '',
     phoneNumber: '',
     transactionCode: '',
   })
+
+  useEffect(() => {
+    loadPaymentMethods()
+  }, [])
+
+  const loadPaymentMethods = async () => {
+    try {
+      setLoading(true)
+      const res = await fetch('/api/payment-methods')
+      if (res.ok) {
+        const methods = await res.json()
+        setPaymentMethods(methods)
+        if (methods.length > 0) {
+          setFormData(prev => ({ ...prev, paymentMethod: methods[0].type }))
+        }
+      }
+    } catch (err) {
+      setError('Erreur lors du chargement des méthodes de paiement')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
     setSuccess(false)
-    setLoading(true)
+    setSubmitting(true)
 
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}')
@@ -72,11 +93,19 @@ export default function PaymentPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur inconnue')
     } finally {
-      setLoading(false)
+      setSubmitting(false)
     }
   }
 
-  const currentMethod = PAYMENT_METHODS[formData.paymentMethod as keyof typeof PAYMENT_METHODS]
+  const currentMethod = paymentMethods.find(m => m.type === formData.paymentMethod)
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 flex items-center justify-center">
+        <Loader2 className="animate-spin" size={32} />
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 p-4">
@@ -119,37 +148,52 @@ export default function PaymentPage() {
               {/* Payment Method */}
               <div className="space-y-4">
                 <Label>Méthode de paiement</Label>
-                <div className="grid gap-3">
-                  {Object.entries(PAYMENT_METHODS).map(([key, method]) => (
-                    <label key={key} className="flex items-center p-3 border border-neutral-200 dark:border-neutral-800 rounded-lg cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-900">
-                      <input
-                        type="radio"
-                        name="paymentMethod"
-                        value={key}
-                        checked={formData.paymentMethod === key}
-                        onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
-                        className="mr-3"
-                        disabled={loading}
-                      />
-                      <div>
-                        <p className="font-semibold">{method.name}</p>
-                        <p className="text-sm text-neutral-600 dark:text-neutral-400">{method.number}</p>
-                      </div>
-                    </label>
-                  ))}
-                </div>
+                {paymentMethods.length === 0 ? (
+                  <div className="p-3 bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded-md text-yellow-700 dark:text-yellow-200 text-sm">
+                    Aucune méthode de paiement disponible
+                  </div>
+                ) : (
+                  <div className="grid gap-3">
+                    {paymentMethods.map((method) => (
+                      <label
+                        key={method.type}
+                        className="flex items-center p-3 border border-neutral-200 dark:border-neutral-800 rounded-lg cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-900"
+                      >
+                        <input
+                          type="radio"
+                          name="paymentMethod"
+                          value={method.type}
+                          checked={formData.paymentMethod === method.type}
+                          onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value })}
+                          className="mr-3"
+                          disabled={submitting}
+                        />
+                        <div>
+                          <p className="font-semibold">{method.name}</p>
+                          <p className="text-sm text-neutral-600 dark:text-neutral-400">{method.accountHolder}</p>
+                          <p className="text-sm font-mono text-neutral-500 dark:text-neutral-400">{method.accountNumber}</p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Instructions */}
-              <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 p-4 rounded-lg">
-                <p className="font-semibold mb-2 text-blue-900 dark:text-blue-100">Instructions de paiement</p>
-                <ol className="text-sm text-blue-800 dark:text-blue-200 space-y-1 list-decimal list-inside">
-                  <li>Envoyez {formatCurrency(amount)} à <strong>{currentMethod.number}</strong></li>
-                  <li>Complétez le formulaire avec vos données de transaction</li>
-                  <li>Soumettez votre demande</li>
-                  <li>Notre administrateur examinera et approuvera rapidement</li>
-                </ol>
-              </div>
+              {currentMethod && (
+                <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 p-4 rounded-lg">
+                  <p className="font-semibold mb-2 text-blue-900 dark:text-blue-100">Instructions de paiement</p>
+                  <ol className="text-sm text-blue-800 dark:text-blue-200 space-y-1 list-decimal list-inside">
+                    <li>
+                      Envoyez <strong>{formatCurrency(amount)}</strong> à{' '}
+                      <strong>{currentMethod.accountNumber}</strong> ({currentMethod.accountHolder})
+                    </li>
+                    <li>Complétez le formulaire avec vos données de transaction</li>
+                    <li>Soumettez votre demande</li>
+                    <li>Notre administrateur examinera et approuvera rapidement</li>
+                  </ol>
+                </div>
+              )}
 
               {/* Form Fields */}
               <div className="space-y-4">
@@ -161,7 +205,7 @@ export default function PaymentPage() {
                     value={formData.phoneNumber}
                     onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
                     required
-                    disabled={loading}
+                    disabled={submitting}
                   />
                 </div>
 
@@ -173,17 +217,17 @@ export default function PaymentPage() {
                     value={formData.transactionCode}
                     onChange={(e) => setFormData({ ...formData, transactionCode: e.target.value })}
                     required
-                    disabled={loading}
+                    disabled={submitting}
                   />
                 </div>
               </div>
 
               <div className="flex gap-4 pt-4">
-                <Button type="submit" className="flex-1" disabled={loading}>
-                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {loading ? 'Traitement...' : 'Soumettre le paiement'}
+                <Button type="submit" className="flex-1" disabled={submitting || paymentMethods.length === 0}>
+                  {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {submitting ? 'Traitement...' : 'Soumettre le paiement'}
                 </Button>
-                <Button type="button" variant="outline" className="flex-1" onClick={() => router.back()} disabled={loading}>
+                <Button type="button" variant="outline" className="flex-1" onClick={() => router.back()} disabled={submitting}>
                   Annuler
                 </Button>
               </div>
