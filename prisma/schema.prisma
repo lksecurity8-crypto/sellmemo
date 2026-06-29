@@ -1,0 +1,98 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User Model
+model User {
+  id                    String          @id @default(cuid())
+  name                  String
+  email                 String          @unique
+  phone                 String?
+  password              String
+  plan                  String          @default("free") // free, pro, business
+  subscriptionExpiresAt DateTime?
+  isAdmin               Boolean         @default(false)
+  isActive              Boolean         @default(true)
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  orders    Order[]
+  payments  Payment[]
+  sessions  Session[]
+
+  @@map("users")
+}
+
+// Order Model
+model Order {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  clientName      String
+  clientPhone     String
+  product         String
+  quantity        Int
+  price           Float
+  deliveryDate    DateTime
+  deliveryTime    String
+  status          String   @default("pending") // pending, delivered, cancelled
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("orders")
+  @@index([userId])
+  @@index([status])
+  @@index([deliveryDate])
+}
+
+// Payment Model
+model Payment {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  amount          Float
+  paymentMethod   String   // orange_money, mtn_mobile_money
+  transactionId   String
+  status          String   @default("pending") // pending, approved, rejected
+  plan            String
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("payments")
+  @@index([userId])
+  @@index([status])
+}
+
+// Session Model (for NextAuth)
+model Session {
+  id        String   @id @default(cuid())
+  sessionToken String  @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expires   DateTime
+
+  @@map("sessions")
+  @@index([userId])
+}
+
+// Verification Token Model (for password reset, email verification)
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
